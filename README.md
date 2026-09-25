@@ -12,10 +12,7 @@
 > Full usage below is in Chinese (matching the product); engineering notes live in
 > [docs/DESIGN.md](docs/DESIGN.md).
 
-<!-- 截图位：把一张图存成 docs/screenshot.png，再把下面这行的注释符号去掉即可。
-     GitHub 会直接显示它；插件市场在没有 screenshots.json 时也会自动从 README 抽取图片。
-![计划看板](docs/screenshot.png)
--->
+![计划看板：日历卡片与当天的计划列表](docs/screenshot.png)
 
 ---
 
