@@ -1,277 +1,197 @@
-# dsh-planner
+# dsh-planner · 计划看板
 
 [![tests](https://github.com/qcsjjjjj/dsh-planner/actions/workflows/tests.yml/badge.svg)](https://github.com/qcsjjjjj/dsh-planner/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A **planner board** for the DeepSeek Harness Web GUI: a calendar card plus per-day plan cards, as a
-third tab next to 对话 / 轨迹 in the centre column. Adding it changes **no product files and no CSS** —
-it rides the public `conversation.view` slot that the built-in chat and trajectory tabs use themselves.
+**给你的 DSH 加一个"计划"标签页**：日历 + 按天排的计划卡片，就在 `对话`、`轨迹` 右边。
+你也可以直接对 AI 说"帮我看看下周三有什么"，或者"每周一早上加个周会"——它能读也能改你的计划。
 
-> 界面是中文优先（与 `对话`/`轨迹` 一致），因此本 README 的正文用中文；开头这一段是给外部读者的英文摘要。
-> The UI is Chinese-first, matching the built-in tabs, so the body of this README is in Chinese.
+> A planner board for the DeepSeek Harness Web GUI: a calendar plus per-day plan cards as a third
+> tab in the centre column, with recurring plans and five model-facing tools so the agent can read
+> and edit your plans in conversation. No build step, no runtime dependencies. Chinese-first UI.
+> Full usage below is in Chinese (matching the product); engineering notes live in
+> [docs/DESIGN.md](docs/DESIGN.md).
 
-**Highlights**
+<!-- 截图位：把一张图存成 docs/screenshot.png，再把下面这行的注释符号去掉即可。
+     GitHub 会直接显示它；插件市场在没有 screenshots.json 时也会自动从 README 抽取图片。
+![计划看板](docs/screenshot.png)
+-->
 
-- **Recurring plans** — `daily` / `weekly` (same weekday as the start date) / `weekdays`, with an
-  optional end date. Editing or deleting asks **"this occurrence / the whole series"**, and
-  completion is tracked **per day**.
-- **One-click clear** (一键躺平) empties a day while **keeping recurring series alive** — only that
-  day is skipped. This is guaranteed by the storage layout, not by remembering to be careful.
-- **Model-facing tools** — the agent can read, create, update, delete and undo plans in conversation
-  (`planner_read` / `planner_write` / `planner_delete` / `planner_clear` / `planner_undo`).
-- **No build step, no runtime dependencies** — plain ES modules on the host side, one classic script
-  on the browser side. Install straight from GitHub.
-- **477 offline assertions** across four suites; `node .dev/run-tests.mjs` needs **no DSH installed**
-  (the few assertions that use DSH's own JSON-Schema validator skip themselves when it is absent).
+---
 
-## 它怎么嵌进产品
+## 它能做什么
 
-不做任何"改动产品"的事。产品自己把视图标签条做成了一个公开插槽：
+### 日历在你手上
+上半部分是一张日历卡片，圆角、周一起始。左上角显示年月，右上角有 `‹` `›` 翻月和 `回到今天`。
 
-- `对话` = 插件 `@deepseek-ai/dsh-client-ui-chat`，注册 `{name:"conversation.view", id:"chat", order:0}`
-- `轨迹` = 插件 `@deepseek-ai/dsh-client-ui-trajectory`，注册 `{id:"trajectory", order:10}`
-- `计划` = 本插件，注册 `{id:"planner", order:20}`
+三种视觉状态一眼分清：
 
-标签条由 `ui-conversation` 的 `ConversationSessionHeader` 渲染，就是一句 `tabs.map(...)`。
-所以本插件**不写一行 CSS**，自动继承字号（13px）、间距（gap 36px）、激活色
-（`--dsw-alias-state-business-primary`）和那条 2px 蓝色下划线。
+| | 样式 |
+| --- | --- |
+| **今天** | 数字**上方**一个小蓝点，数字加粗 |
+| **选中的日期** | 一整块蓝色实心圆角，数字反色 |
+| **有计划的日期** | 数字**下方**最多三个小圆点，表示当天有几条计划 |
 
-左右侧栏的推挤同样不用管：外层是 CSS Grid
-`gridTemplateColumns: ${sidebar}px minmax(0,1fr) ${rightbar}px`，中间列是 `minmax(0,1fr)`，
-侧栏开合只换 track，不涉及中间列的 transform/z-index。标签内容只要填满父容器即可。
+"今天"和"选中"用**位置**区分而不是颜色深浅——两者叠在一起时也不会糊掉。
 
-## Install (from this repo)
+### 计划卡片
+选中哪天，下半部分就列哪天的计划，按开始时间排序。每张卡片上有：
+
+- 左边一道**颜色竖条**表示重要度：**高**（红）/ **中**（琥珀）/ **低**（蓝），右侧还有一个对应颜色的小标签
+- 标题、时间范围（`14:00 – 15:00`）
+- 内容（多行，可留空）
+- 左边一个**方形完成框**，勾上就划线置灰，再点可撤销
+- 右边 `✎` 编辑、`✕` 删除
+
+时间重叠的两条计划会带一个 `⚠`——**只是提示，不拦你**。同一天本来就可能几件事并行。
+
+### 新建与编辑用同一个浮窗
+右下角 `新建` 打开浮窗：标题、内容、开始时间、结束时间、重要度。
+时间用系统自带的选择器（键盘和手机上都好用）；标题必填、结束时间必须晚于开始时间，
+不满足时"确定"会灰掉并说明原因。**编辑复用同一个浮窗**，字段已填好。
+
+### 删除可以后悔
+点 `✕` 直接删掉，底部随即出现 `已删除「…」  撤销`，**5 秒内**点一下就能恢复。
+
+### 一键躺平
+右下角 `一键躺平` 清空当天的全部计划，会先弹确认框并**写明条数**。
+如果你的重复计划也落在那天，它会**只跳过这一天，系列本身不动**——确认框里会专门说明这一点
+（例如"其中 2 条属于重复计划，仅跳过该日"）。清空后同样可以撤销。
+
+### 重复计划
+新建时选 `重复`：**不重复 / 每天 / 每周 / 工作日**。选了非"不重复"会多出一行**截止日期**（可留空＝永不结束）。
+那一行还会实时告诉你规则具体落在哪天，例如 `从 2026-09-30 起，每周三`。
+
+- **每周**按你开始那天的星期几重复（在周三建的就是每周三）
+- 编辑或删除重复计划时，会问你「**仅此一次 / 整个系列**」——默认的"仅此一次"放在主位，
+  破坏性大的"整个系列"用危险色放在旁边。改一次会议时间不会波及整个系列
+- **完成状态按天独立**：勾了这周三，不影响下周三
+
+### 过去的日期不能补建
+翻到过去的日期，`新建` 会变灰（悬停有说明），但**仍然可以编辑、勾完成、删除、躺平**——
+补记纠错都合理，只是不让你手滑新建。（Agent 走的是另一条路，见下。）
+
+### 和主题一致
+配色全部取产品的主题变量，明暗主题下都正常，没有一处硬编码颜色。
+
+---
+
+## 让 AI 帮你记
+
+这是这个插件比较特别的地方：装上之后，**AI 在对话里就能读写你的计划**，
+不需要你去点界面。你可以直接说：
+
+> "看看我下周三有什么安排"
+> "帮我把周三下午的评审挪到周四上午十点"
+> "每周一早上九点加一个周会，先排两个月"
+> "周三我什么都不想干了，清空吧"
+> "把昨天下午那场会补记一下"
+> "刚才那次删错了，撤销"
+
+它能做的事：
+
+| 动作 | 说明 |
+| --- | --- |
+| **看** | 读某一天或某个日期区间，默认"今天起 7 天" |
+| **建 / 改** | 建计划、改计划、设重复与截止日期；改的时候只说你要改的那一项，**其余字段自动保持不变** |
+| **删** | 删一条；重复计划可以只跳过这一次，或删掉整个系列 |
+| **清空** | 清空一整天（相当于帮你按一键躺平） |
+| **撤销** | 撤销刚才那次删除或清空 |
+
+两个刻意的设计：
+
+- **重复计划的删除是"可撤销"的**。界面里删错了有 5 秒撤销条，AI 操作时没有这个条，
+  所以它每次删除都会记下撤销凭据——你说一句"撤销"就能回来。
+- **清空一整天需要它"明确确认一次"**，不是随手就能清掉。而删除单条不需要这道关卡——
+  那个是灵活的日常操作。
+
+**关于过去日期**：界面上不许为过去新建，但 AI 可以——因为"把昨天那场会补记一下"是真实需求。
+代价是它会**在结果里明确写出"这是为过去日期补记的"**，让你看得见。它被要求只在你明确要求补记时才这么做。
+
+---
+
+## 安装
+
+需要 **DSH 0.1.5-rc.3 或兼容版本**（web profile），以及 PATH 上的 `pnpm` 与 Node.js ≥ 20。
 
 ```sh
 dsh plugin --profile web add github:qcsjjjjj/dsh-planner
-# then restart `dsh web` once — the bundle roster is composed at boot
-dsh plugin --profile web remove dsh-planner   # uninstall; the tab disappears
 ```
 
-There is **no build step**: `lib/` and `client/` contain the shipped JavaScript, so a GitHub install
-works as-is. `"private": true` in `package.json` is deliberate — it prevents an accidental `npm publish`
-while leaving `github:` and tarball installs untouched. Remove that flag if you *do* want to publish.
+装完**重启一次 `dsh web`**（插件的加载名单在启动时组装），然后刷新页面，
+标签条上就会出现 `计划`。
 
-## 本地开发安装（本机做法）
+想固定版本就用 tag：
 
-源码在工作区，`~/.dsh/local-plugins/dsh-planner` 是指向它的 **junction**（单一来源，
-和 `dsh-github-accel`、`dsh-hide-open-in-app` 同一做法）。用 junction 而不是直接
-`link:` 带空格的路径，是因为工作区路径含空格。
-
-```powershell
-dsh plugin --profile web add link:C:/Users/Administrator/.dsh/local-plugins/dsh-planner
-# 装完需重启 dsh web 一次（bundle 列表在启动时组装；~/.dsh/restart-dsh.ps1 可用）
-dsh plugin --profile web remove dsh-planner   # 卸载，标签随之消失
+```sh
+dsh plugin --profile web add github:qcsjjjjj/dsh-planner#v0.1.0
 ```
 
-## 开发回路
+卸载：
 
-**改 `client/client.js` 不需要重启、不需要刷新页面。**
-`@deepseek-ai/dsh-client-hmr` 无条件挂载，以 500ms 轮询每个 client 图的
-`artifactBaseline`，而它监视的文件正是 `exports["./client"]` 解析出的那个文件。
-改动 → ~500ms 后 `rebuilt()` → SSE `/plugins/events` 推 `{type:"rebuilt"}` → 浏览器热替换 fiber。
-
-改 `lib/index.js`（宿主半边）**需要重启**。
-
-自检：宿主半边有一个 `GET /dsh-planner/ping`，浏览器半边启动时会 fetch 它并在面板里显示结果——
-于是"客户端半边 → 宿主半边"整条链路在第①步就被验证掉。
-
-```powershell
-curl.exe -s http://127.0.0.1:3080/dsh-planner/ping
-# {"ok":true,"plugin":"dsh-planner","step":4,"storage":"…\\storages\\planner\\plans",
-#  "series":"…\\storages\\planner\\series.json","recurrence":true}
+```sh
+dsh plugin --profile web remove dsh-planner
 ```
 
-`step` 是宿主半边自报的版本号：客户端用它判断对面是否已经支持重复计划。
-**旧宿主（step < 4）会丢掉 `recurrence` 字段**，新建的"每天"会静默变成不重复——
-所以界面在那种情况下会直接藏起重复选择器并给出提示，而不是让你踩进去。
+标签随之消失，**你的数据不会被删**。
 
-计划的落盘位置就是上面 `storage` 报的那个目录，单次计划每天一个文件：
+**关于 `private: true`**：`package.json` 里故意保留了它（DSH 本地插件的惯例），
+它挡住误发 npm，不影响 `github:` 与 tarball 安装。想发布 npm 就删掉这一个字段。
 
-```
-~/.dsh/storages/planner/plans/2026-09-24.json
-{
-  "version": 2,
-  "date": "2026-09-24",
-  "plans": [ { "id": "…", "title": "…", "content": "…", "start": "09:00", "end": "10:00",
-               "importance": "high", "done": false,
-               "recurrence": null, "until": null,
-               "createdAt": "…", "updatedAt": "…" } ],
-  "updatedAt": "…"
-}
-```
+---
 
-重复系列另存一处（见下一节）。
+## 你的数据
 
-写入是"临时文件 + fsync + 同卷改名"，所以崩溃时只会看到旧文件或新文件，不会看到半个文件。
-解析不了的文件会被改名成 `<date>.json.corrupt-<时间戳>` 留档，然后按空处理——不静默丢数据，
-也不让一天坏掉拖垮整个区间。**单日读取是严格的**（读坏了就如实报错），
-**区间读取是宽容的**（跳过坏的那天，其余照常渲染）。
-
-## 分步状态
-
-| 步骤 | 内容 | 状态 |
-| --- | --- | --- |
-| ① | 骨架：标签 + 面板 + 宿主自检 | **已完成**（用户已肉眼确认） |
-| ② | 日历卡片（翻月、周一起始、今天、选中、密度圆点） | **已完成**（用户已确认） |
-| ③ | 计划卡片列表、方形完成框、新建/编辑浮窗、一键躺平、持久化 | **已完成**（用户已确认） |
-| ④ | 重复计划（规则、截止日期、作用域询问、按天独立完成） | **已完成**（用户已确认） |
-| ⑤ | 模型工具：Agent 可在对话里读写计划 | **代码完成**，等一次重启生效 |
-
-## 重复计划的存储与语义
-
-系列定义住在 **`<root>/series.json`**，不在任何日期文件里：
+计划存在你自己的机器上，纯 JSON 文件，一个日期一个文件：
 
 ```
-~/.dsh/storages/planner/plans/2026-09-24.json   单次计划（recurrence 为 null）
-~/.dsh/storages/planner/series.json             重复系列的定义
+~/.dsh/storages/planner/
+├── plans/2026-09-30.json     单次计划（按日期）
+├── series.json               重复系列的定义
+└── undo.json                 最近一次删除/清空的撤销凭据
 ```
 
-分两个文件不是洁癖：重复系列的"某一次发生"散落在许多日期上，而**系列定义本身不属于任何
-一个日期**。放进日期文件后，躺平（规格要求"只跳过该日、系列保留"）就必须小心翼翼地绕开它；
-放进独立文件后，**躺平的可达范围天然不含系列定义，这条规则由结构保证**，不是靠记性。
+- **想备份就复制整个 `planner/` 目录**，想迁移就把它放到另一台机器的同一位置。
+- 写入是原子的（临时文件 + `fsync` + 改名），断电或崩溃时不会留下半个文件。
+- 某个文件万一损坏，会被改名成 `<日期>.json.corrupt-<时间戳>` **留档**，而不是被丢掉；
+  那一天按空处理，**其余日子照常显示**。
+- 没有云端、没有遥测、没有网络请求。
 
-```json
-{
-  "id": "…", "title": "每日站会", "content": "", "start": "09:00", "end": "09:15",
-  "importance": "medium",
-  "anchor": "2026-09-25",
-  "recurrence": "daily",
-  "until": null,
-  "exceptions": {
-    "2026-10-01": { "skip": true },
-    "2026-10-05": { "done": true },
-    "2026-10-08": { "override": { "title": "站会（改）", "start": "10:00", "end": "10:15" } }
-  }
-}
+---
+
+## 已知限制
+
+- **界面是中文的**（与 `对话`/`轨迹` 一致）。词典里已有英文，但日历表头、星期名等仍是硬编码中文，
+  完整双语是一件独立的事。
+- **撤销是单层的**——只记得最近一次删除或清空（和界面那个 5 秒撤销条语义一致）。
+- **一键躺平只能按天**，没有"清空一个日期区间"。
+- **重复规则只有三种**（每天 / 每周 / 工作日），没有每月、没有"每 N 天"、没有"重复 N 次"。
+- **不做跨天计划**：一条计划属于一天，时间和日期都是本地的。
+
+---
+
+## 开发
+
+```sh
+node .dev/run-tests.mjs      # 四套离线测试，477 条断言
 ```
 
-- `recurrence` 只有三种：`daily` / `weekly` / `weekdays`。`weekly` 按 **anchor 那天**的
-  星期几重复，界面会实时提示"按开始那天算：每周三"。
-- `until` 为 null 表示永不结束。
-- `exceptions` 的三种键对应三种"只作用于这一次"的操作：**跳过**（删除该次）、
-  **完成**（按天独立的勾选）、**覆盖**（只改这一天的字段）。
-- 删除或编辑时界面会问「**仅此一次 / 整个系列**」，默认的"仅此一次"放在主位（最右），
-  破坏性大的"整个系列"用危险色放在左边。
-- 展开出的实例带 `seriesBase`（系列自身的值，**未**叠加当天覆盖）。编辑"整个系列"时必须用它，
-  否则会把某一天的临时改动悄悄写成整个系列的新定义。
+测试**不需要安装 DSH**：它用临时目录驱动真实的 `lib/` 与 `client/` 代码。
+只有少数几条依赖 `@deepseek-ai/dsh-tools` 的 schema 校验断言，在找不到该包时会自动跳过。
 
-### 两条刻意的限制
-
-1. **单次计划不能就地改成重复计划**——宿主明确拒绝，界面也不给入口。那份记录住在日期文件里、
-   展开逻辑不认它，默默接受会造出一个永不重复的计划（一个界面上看不出来的静默失效）。
-   想改就删掉重建。
-2. **重复计划必须保留一种重复方式**。要停止重复，请设置截止日期，或删除整个系列。
-   把"重复"改成"不重复"会被拒绝：那条系列一旦脱离展开逻辑，就会从它那个可能很遥远的
-   锚点日开始变得不可见。
-
-### 锚点当天不一定发生（一个真踩过的边界）
-
-「工作日」规则锚在**周六**时，那天本来就不该有这条计划。`save` 曾经把 `expandSeries` 的
-`null` 直接回出去，后果有两个：界面"创建成功却什么都不出现"，而模型工具拿它渲染直接崩。
-
-现在 `save` 对系列**永不回 null**：它回一份系列形状的计划，外加 `occursOnAnchor` 与
-`firstDate`（首次发生的日期；`until` 早于第一个合法工作日时为 `null`）。界面会在浮窗里
-提前提醒「这一天是周末，计划将从下一个工作日开始」，工具也会在结果里写明。
-
-## 模型工具（Agent 读写计划）
-
-宿主半边向 `ctx.tools` 注册 5 个工具，**每个会话自动可见**，不需要任何名单或开关：
-
-| 工具 | 作用 |
+| 目录 | 内容 |
 | --- | --- |
-| `planner_read` | 读一天或一个区间；返回每条的 `id`（后续删/改要用）。无参默认今天起 7 天 |
-| `planner_write` | 建或改；可设 `recurrence` / `until`；带 `id` 即更新 |
-| `planner_delete` | 删一条（按 `id`，或按唯一 `title`）；重复计划可选只跳过这一次 |
-| `planner_clear` | 一键躺平的对应工具；**必须显式传 `confirm: true`** |
-| `planner_undo` | **不带参数**即撤销刚才那次删除/清空（`token` 只是可选的精确通道） |
+| `lib/` | 宿主半边：HTTP 路由、持久化、模型工具 |
+| `client/` | 浏览器半边：标签页与计划看板（经典脚本，非 ESM） |
+| `.dev/` | 离线测试与开发用小工具，不属于插件交付物 |
+| `docs/DESIGN.md` | **设计与实现说明**：架构、数据结构、以及为什么这样选 |
 
-### ⚠️ 模型看到的只有 `render`，看不到返回值
+**改 `client/client.js` 不需要重启、也不需要刷新页面**——产品的 HMR 会在约 500ms 内热替换。
+改 `lib/` 下的宿主半边需要重启一次。
 
-这是实机验收撞出来的、也最容易设计错的一点：**模型只拿到 `output.render` 产出的文本**，
-拿不到 `execute` 返回的结构化值。任何"让模型把某个句柄传回来"的设计都是断的——
-第一版的 `planner_undo` 要求把 `undo_token` 传回来，而那个 token 从未出现在模型可见的任何地方，
-于是撤销对整个 Agent 不可达。
+架构、存储格式、模型工具的协议约束、以及若干"为什么是这样"的取舍，都在
+[docs/DESIGN.md](docs/DESIGN.md)。
 
-修法不是把上千字的 JSON 塞进 `render` 让模型照抄（内容可能很长，不可靠），而是把
-**"最后一次破坏性操作"落盘到 `<root>/undo.json`**，让 `planner_undo` 不带参数就能撤销。
-这既可靠，也更贴合用户的说法（"撤销刚才那次"）。撤销成功后记录被清掉，所以每次只用一次。
+## 许可
 
-**一般教训**：任何需要在后续调用里被引用的东西，必须出现在 `render` 的文本里，
-或者由宿主自己记住——不能只放在返回值里。
-
-### 三条按证据做的决定
-
-1. **零 import，参数手写 raw JSON Schema。** 本插件是 `link:` 安装的，宿主半边只能 import
-   内置模块与相对文件（`@deepseek-ai/dsh-tools` 会 `ERR_MODULE_NOT_FOUND`）。好在
-   `ctx.tools.register()` 接受**普通对象**，而且只会校验 `output.schema`——
-   `defineTool` 那套作者 DSL（`required: true`）会先被编译，**不能手写**。
-   已有一个正在运行的先例：`dsh-workflow-cards` 用同一手法注册 `run_saved_workflow`。
-2. **必须有 `planner_undo`，而且必须能不传参数调用。** 界面里删错了有 5 秒撤销条，而**工具没有**
-   ——不给自己留退路的删除就是单程票。它不带参数即撤销刚才那一次（原因见上一节）。
-3. **`planner_clear` 要 `confirm: true`。** 本会话的审批提示是**禁用**的（需要审批的动作会
-   被自动拒绝），所以走不了审批。改用"参数上的减速带"：模型必须主动写出 `confirm: true`，
-   而不是顺手调用一个删除就清空一整天。
-4. **更新时未提及的字段一律沿用现值。** 也是实机撞出来的：模型说"把这一次挪到 16 点"时
-   不会重复列出重要度，若把未提及的字段默认成 `medium`，就会把原本的"高"静默改成"中"。
-   `title` 因此只在**新建**时必填（由 handler 判定，不再写进 schema 的 `required`）。
-
-### 与界面不一致的一处，以及为什么
-
-**工具允许为过去日期新建计划，界面不允许。** 界面上禁用「新建」是为了防手滑；而
-"把昨天下午那场会补记一下"是真实且合理的请求，工具拒绝它就等于让这一整类请求做不到。
-所以规则改为由**描述**约束使用时机（"仅在你被明确要求补记时"），并由工具**如实回传**
-（结果里写明这是为哪个过去日期创建的），让用户在对话里看得见。底层是 `save` 的
-`allowPastCreate` 开关，**只影响新建**。
-
-## 离线测试
-
-```powershell
-node "F:\dsh work part5\dsh-planner\.dev\run-tests.mjs"
-```
-
-四套，都不需要 DSH、不需要重启、不需要浏览器：
-
-| 文件 | 覆盖 |
-| --- | --- |
-| `.dev/smoke-client.mjs` | 日历数学（周一起始、跨月补齐、闰年、跨年）、区间计算、排序、重叠判定、表单校验（含重复与截止日期）、重要度配色、重复规则的措辞 |
-| `.dev/smoke-store.mjs` | 持久化层：原子写、校验、过去日期边界、撤销语义、损坏文件留档、排序，以及**重复计划的四种规则、截止日期、跳过、作用域、按天独立完成、躺平不清系列** |
-| `.dev/smoke-host.mjs` | import 真实的 `lib/index.js`，用真实 `Readable` 喂请求体，走完整 7 条路由并检查状态码与响应体 |
-| `.dev/smoke-tools.mjs` | 5 个模型工具：结构契约、**用 `dsh-tools` 真实的 `assertSupportedJsonSchema` 校验 `output.schema`**、参数 schema 真的能挡坏参数、以及逐个工具跑真实 `execute`（含过去日期补记、作用域、周末锚点、撤销、`confirm` 门槛） |
-
-`.dev/render-calendar.mjs` 会用真实代码渲染文本版日历，便于对着屏幕逐格核对。
-`.dev/probe-resolve.mjs` 是模块解析探针，用来验证"link 安装的插件只能 import 内置模块"这条约束。
-
-## 两条按证据而非偏好做的取舍
-
-**1. 持久化用手写的 `node:fs`，不用 `ctx.storageDomain`。**
-插件是 `link:` 安装的，Node 按 realpath 解析，非内置的裸模块名一律 `ERR_MODULE_NOT_FOUND`
-（`.dev/probe-resolve.mjs` 实测，从真实路径与 profile 符号链接路径都一样）。
-`ctx.storageDomain` 本身不需要 import 就能拿到，`domainTable(schema)` 的实现也确实只是
-`{ valueSchema: schema }`、设施全文只调用 `safeParse(null)` 与 `parse(...)`——理论上可以手搓一个
-鸭子类型 schema 糊过去。但那样"设施只会调这三个方法"就成了只会在**重启之后**才被证伪的推断。
-改用内置模块是可证明的，且本 profile 里已有一个正常工作的先例（`dsh-balance-tracker` 用同一手法
-写 `storages/`）。落盘路径与设计冻结时完全一致。
-
-**2. 只用 `Modal` 一个产品原语，其余手写。**
-证据：`Button` 不用——第一方在 `Modal` 的 `footer` 里用的就是朴素 `<button>`，危险动作用
-`data-danger`；`Input` 不用——**没有任何第一方插件在用这个原语**；`Toast` 不用——其实现是
-`$C({text,icon,anchor,holdMs,onDone})`，没有 action/children 槽位，装不下"撤销"按钮，
-所以撤销做成了列表内的可点撤销条。颜色一律取 `--dsw-*` token，无一处硬编码。
-
-## ⚠️ 写 `.ps1` 的坑（踩过，代价是意外重启了一次 GUI）
-
-**不要往 `.ps1` 里写非 ASCII 注释。** 若文件是 UTF-8 **无 BOM**，Windows PowerShell 5.1
-会按系统 ANSI 码页（中文机器上是 GBK）解码，中文注释变乱码；更糟的是，若注释行以多字节
-字符结尾，乱码产生的"前导字节"会**吞掉换行符**，把下一行语句并进注释。
-
-实测：一个以 `。` 结尾的中文注释吞掉了紧随其后的 `Start-Sleep -Seconds 90`，
-于是本该 90 秒后才关停 GUI 的重启助手在 **2 秒**后就关停了。
-
-自检办法（用 5.1 而非 pwsh 做词法分析）：
-
-```powershell
-powershell.exe -NoProfile -Command "[System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw .\x.ps1),[ref]`$null) | Select Type,Content,StartLine"
-```
-
-安全的三种写法，任选：**(a)** 注释只用 ASCII；**(b)** 存成 UTF-8 **带 BOM**；**(c)** 用 `pwsh`(7+) 执行。
+[MIT](LICENSE)
