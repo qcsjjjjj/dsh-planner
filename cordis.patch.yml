@@ -1,0 +1,5 @@
+# dsh bundle patch：把 dsh-planner 这一行插进 profile 的加载器树。
+# 装法见 README.md；删插件即整行消失，不改任何产品文件。
+- insert:
+    - id: dsh-planner
+      name: 'dsh-planner'

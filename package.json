@@ -1,0 +1,52 @@
+{
+  "name": "dsh-planner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Calendar + plan cards for the DeepSeek Harness Web GUI, with recurring plans and model-facing tools for the agent.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek",
+    "harness",
+    "planner",
+    "calendar",
+    "planner-board"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": { "default": "./lib/index.js" },
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node .dev/run-tests.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qcsjjjjj/dsh-planner.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qcsjjjjj/dsh-planner/issues"
+  },
+  "homepage": "https://github.com/qcsjjjjj/dsh-planner#readme",
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+    }
+  },
+  "peerDependencies": { "@deepseek-ai/cordis": "^4.0.2" }
+}

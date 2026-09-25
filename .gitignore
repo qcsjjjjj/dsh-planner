@@ -1,0 +1,7 @@
+# 本地开发产物，不进仓库
+node_modules/
+.dev/restart.log
+.dev/*.log
+*.tgz
+*.tmp
+.tmp-*

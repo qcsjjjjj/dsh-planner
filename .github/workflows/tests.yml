@@ -1,0 +1,24 @@
+name: tests
+
+# 这些测试**不需要 DSH**：它们用临时目录驱动真实的 lib/ 与 client/ 代码。
+# 只有 smoke-tools 里依赖 @deepseek-ai/dsh-tools 的那几条断言会在找不到该包时自动跳过。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: 跑全部离线测试
+        run: node .dev/run-tests.mjs
